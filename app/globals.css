@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%; /* slate-50 */
+    --foreground: 222.2 84% 4.9%; /* slate-900 */
+    --primary: 224 71% 33%; /* blue-900 */
+    --primary-foreground: 210 40% 98%;
+    --accent: 347 77% 50%; /* rose-600 */
+    --accent-foreground: 210 40% 98%;
+  }
+
+  body {
+    background-color: theme('colors.background');
+    color: theme('colors.foreground');
+  }
+}
