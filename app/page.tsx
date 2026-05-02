@@ -14,12 +14,12 @@ export default function Home() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'system', content: 'Welcome. I can help you find your election information. What state do you currently reside in?' }
+    { role: 'system', content: 'Welcome to the India Election Assistant, powered by the Election Commission of India (ECI). I can help you find your polling booth, voter registration deadlines, and ID requirements. Which Indian state or city are you from?' }
   ]);
   const [dashboardData, setDashboardData] = useState<DashboardData>({
-    pollingLocation: 'Awaiting state input.',
-    deadlines: 'Awaiting state input.',
-    idRequirements: 'Awaiting state input.'
+    pollingLocation: 'Awaiting your state or city.',
+    deadlines: 'Awaiting your state or city.',
+    idRequirements: 'Awaiting your state or city.'
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -50,10 +50,17 @@ export default function Home() {
         body: JSON.stringify({ messages: currentMessages })
       });
 
-      const data = await response.json();
-      
+      // Safely parse JSON — if server returns an HTML error page this won't crash
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(`Server returned an unreadable response (HTTP ${response.status}). Try restarting the dev server.`);
+      }
+
+      // Server returned a structured error (e.g. Gemini quota, model error, missing key)
       if (data.error) {
-        setMessages(prev => [...prev, { role: 'system', content: `Error: ${data.error}` }]);
+        setMessages(prev => [...prev, { role: 'system', content: `⚠️ ${data.error}` }]);
         setIsLoading(false);
         return;
       }
@@ -83,9 +90,11 @@ export default function Home() {
 
       setMessages(prev => [...prev, { role: 'system', content: aiText }]);
       
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'system', content: 'An unexpected error occurred while communicating with the assistant.' }]);
+    } catch (error: any) {
+      // This fires for true network failures or the JSON parse error above
+      const msg = error?.message || 'An unexpected error occurred.';
+      console.error("Chat fetch error:", msg, error);
+      setMessages(prev => [...prev, { role: 'system', content: `⚠️ ${msg}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -106,8 +115,8 @@ export default function Home() {
             <Bot className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-bold text-xl text-primary leading-tight">Civic Assistant</h1>
-            <p className="text-sm text-slate-500">Official Election Guide</p>
+            <h1 className="font-bold text-xl text-primary leading-tight">India Election Assistant</h1>
+            <p className="text-sm text-slate-500">Powered by Election Commission of India (ECI)</p>
           </div>
         </div>
       </header>
@@ -118,7 +127,7 @@ export default function Home() {
         <ChevronRight className="w-4 h-4" />
         <span className="hover:underline cursor-pointer text-primary">Voter Information</span>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-slate-700 font-medium">Your State Profile</span>
+        <span className="text-slate-700 font-medium">Your State / City Profile</span>
       </div>
 
       {/* Two Column Layout */}
@@ -129,7 +138,7 @@ export default function Home() {
           <div className="border-b border-slate-200 pb-4">
             <h2 className="text-3xl font-bold text-slate-800">Your Election Dashboard</h2>
             <p className="text-slate-600 mt-2 max-w-2xl">
-              Follow the instructions in the assistant to retrieve your specific polling locations, deadlines, and voter ID requirements.
+              Tell the assistant your Indian state or city to get your polling booth details, voter registration deadlines, and accepted ID documents.
             </p>
           </div>
 
@@ -166,10 +175,10 @@ export default function Home() {
                <h3 className="font-semibold text-slate-800">Status Overview</h3>
             </div>
             <div className="p-6 text-sm text-slate-600 flex flex-col items-center justify-center py-12">
-               {dashboardData.pollingLocation === 'Awaiting state input.' ? (
-                 <p>Please use the assistant on the right to load your voting information.</p>
+               {dashboardData.pollingLocation === 'Awaiting your state or city.' ? (
+                 <p>Tell the assistant your Indian state or city (e.g. &quot;Maharashtra&quot; or &quot;Bengaluru&quot;) to load your voter information.</p>
                ) : (
-                 <p className="text-center text-primary font-medium">Your state profile has been loaded. Check the cards above for your customized information.</p>
+                 <p className="text-center text-primary font-medium">Your state/city profile has been loaded. Check the cards above for your election details.</p>
                )}
             </div>
           </div>
@@ -212,7 +221,7 @@ export default function Home() {
                 type="text" 
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Enter your state..." 
+                placeholder="Enter your state or city (e.g. Maharashtra, Delhi)..." 
                 disabled={isLoading}
                 className="w-full pl-3 pr-10 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm text-slate-800 bg-white disabled:opacity-50"
               />
