@@ -23,7 +23,7 @@
   
   /* Hide non-essential elements */
   #top-banner, #main-header, #breadcrumbs, #chat-aside, #checklist-section, 
-  #map-section, #status-overview, .no-print { display: none !important; }
+  #map-section, .no-print { display: none !important; }
   
   /* Reset layout to flow naturally */
   body, html, #app-root { height: auto !important; overflow: visible !important; background: white !important; }

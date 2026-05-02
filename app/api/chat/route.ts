@@ -4,11 +4,63 @@ import { NextResponse } from "next/server";
 // Initialized once at module level — efficient, avoids re-creating on every request
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+// ── Rate Limiter ────────────────────────────────────────────────────────────
+// Simple in-memory store: tracks { count, windowStart } per IP address.
+// Allows MAX_REQUESTS per WINDOW_MS per unique IP. No extra packages needed.
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+const MAX_REQUESTS = 10;                 // max 10 requests per minute per IP
+
+const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    // New IP or window has expired — reset counter
+    rateLimitMap.set(ip, { count: 1, windowStart: now });
+    return false;
+  }
+
+  if (entry.count >= MAX_REQUESTS) {
+    return true; // Limit exceeded within current window
+  }
+
+  entry.count++;
+  return false;
+}
+
+// Periodically clean up stale entries to prevent memory leaks
+// Runs every 5 minutes, removes entries whose window has long expired
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+// ────────────────────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
   // 1. Guard: API key must be present
   if (!process.env.GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY is missing from environment variables.");
     return NextResponse.json({ error: "The assistant is currently unavailable due to a configuration issue. Please try again later." }, { status: 500 });
+  }
+
+  // 2. Rate limiting — check before doing any heavy work
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    req.headers.get('x-real-ip') ||
+    'unknown';
+
+  if (isRateLimited(ip)) {
+    console.warn(`Rate limit exceeded for IP: ${ip}`);
+    return NextResponse.json(
+      { error: "You're sending messages too quickly. Please wait a moment and try again." },
+      { status: 429 }
+    );
   }
 
   try {
@@ -17,6 +69,26 @@ export async function POST(req: Request) {
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Invalid request: messages array is required." }, { status: 400 });
     }
+
+    // ── Input Size & Content Validation ──────────────────────────────────────
+    // Guard 1: Prevent unbounded history (each message sends the full history to Gemini)
+    if (messages.length > 50) {
+      return NextResponse.json({ error: "Conversation is too long. Please refresh to start a new session." }, { status: 400 });
+    }
+
+    // Guard 2: Validate every message has a proper string content field
+    for (const msg of messages) {
+      if (typeof msg.content !== 'string') {
+        return NextResponse.json({ error: "Invalid message format." }, { status: 400 });
+      }
+    }
+
+    // Guard 3: Cap the latest user message to 1000 characters to prevent token abuse
+    const rawLatestMessage = messages[messages.length - 1].content as string;
+    if (rawLatestMessage.length > 1000) {
+      return NextResponse.json({ error: "Your message is too long. Please keep it under 1000 characters." }, { status: 400 });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Language instruction appended to system prompt
     const langName = language || "English";
@@ -37,7 +109,7 @@ export async function POST(req: Request) {
       history.shift();
     }
 
-    const latestMessage = messages[messages.length - 1].content;
+    const latestMessage = rawLatestMessage.trim();
 
     // 3. Define fallback models in order of preference (highest free-tier quota first)
     // gemini-2.0-flash: 1500 RPD free | gemini-2.0-flash-lite: 1500 RPD free | gemini-2.5-flash: 20 RPD free
@@ -84,9 +156,16 @@ Keep your conversational response brief, professional, and clear. Rely on the JS
         });
 
         const chat = model.startChat({ history });
-        const result = await chat.sendMessage(latestMessage);
+
+        // Race the model response against a 15-second timeout.
+        // If the model hangs (no error, no response), the timeout wins
+        // and the catch block moves us to the next fallback model.
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Model ${modelName} timed out after 15s`)), 15000)
+        );
+        const result = await Promise.race([chat.sendMessage(latestMessage), timeoutPromise]);
         responseText = result.response.text();
-        
+
         // Success! Clear error and break out of the fallback loop
         lastError = null;
         break;

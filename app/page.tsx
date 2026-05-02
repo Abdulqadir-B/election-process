@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Vote, Landmark, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2, CheckCircle2, Circle, Printer, Globe } from 'lucide-react';
+import { Vote, Landmark, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2, CheckCircle2, Circle, Printer, Globe, MessageSquare } from 'lucide-react';
 
 type Message = { role: 'user' | 'system'; content: string };
 type DashboardData = { pollingLocation: string; deadlines: string; idRequirements: string };
@@ -85,6 +85,12 @@ export default function Home() {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Sync <html lang="..."> with the selected language for screen readers & SEO
+  const LANG_CODES: Record<Lang, string> = { English: 'en', Hindi: 'hi', Tamil: 'ta', Telugu: 'te' };
+  useEffect(() => {
+    document.documentElement.lang = LANG_CODES[lang];
+  }, [lang]);
 
   // Language switch — resets chat and dashboard
   const handleLangChange = (l: Lang) => {
@@ -192,9 +198,11 @@ export default function Home() {
     while ((match = urlPattern.exec(text)) !== null) {
       if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
       const href = /^https?:\/\//.test(match[0]) ? match[0] : `https://${match[0]}`;
+      // Strip javascript: protocol to prevent XSS if AI hallucinates a malicious URL
+      const safeHref = /^javascript:/i.test(href) ? '#' : href;
       const displayText = match[0].replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
       result.push(
-        <a key={match.index} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <a key={match.index} href={safeHref} target="_blank" rel="noopener noreferrer" className={linkClass}>
           {displayText}
         </a>
       );
@@ -315,7 +323,7 @@ export default function Home() {
     <main id="app-root" className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
       {/* Print-only header */}
       <div id="print-only" className="p-6 border-b border-slate-200">
-        <h1 className="text-2xl font-bold text-slate-800">Civic Election Assistant — Voter Summary</h1>
+        <h2 className="text-2xl font-bold text-slate-800">Civic Election Assistant — Voter Summary</h2>
         <p className="text-sm text-slate-500 mt-1">Printed on {new Date().toLocaleDateString('en-IN')}{stateName ? ` · Location: ${stateName}` : ''}</p>
       </div>
 
@@ -329,6 +337,8 @@ export default function Home() {
           <Globe className="w-3.5 h-3.5 text-slate-400 mr-1 hidden sm:block" />
           {(['English', 'Hindi', 'Tamil', 'Telugu'] as Lang[]).map(l => (
             <button key={l} onClick={() => handleLangChange(l)}
+              aria-label={`Switch language to ${l}`}
+              aria-pressed={lang === l}
               className={`px-2 py-0.5 rounded text-xs transition-colors ${lang === l ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'}`}>
               {LANG_LABELS[l]}
             </button>
@@ -376,7 +386,7 @@ export default function Home() {
          <button 
            onClick={() => setMobileTab('chat')} 
            className={`flex-1 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${mobileTab === 'chat' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-slate-500 hover:text-slate-700'}`}>
-           <Landmark className="w-4 h-4" /> Assistant
+           <MessageSquare className="w-4 h-4" /> Assistant
          </button>
          <button 
            onClick={() => setMobileTab('dashboard')} 
@@ -468,20 +478,18 @@ export default function Home() {
               <MapPin className="w-5 h-5 text-slate-600" />
               <h3 className="font-semibold text-slate-800">Polling Area Map</h3>
             </div>
-            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && stateName ? (
-              <iframe title="Polling Area Map" width="100%" height="280" className="border-0" referrerPolicy="no-referrer-when-downgrade"
-                src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(stateName + ', India')}`} />
+            {stateName ? (
+              <iframe
+                title="Polling Area Map"
+                width="100%"
+                height="280"
+                className="border-0"
+                src={`/api/maps-embed?q=${encodeURIComponent(stateName)}`}
+              />
             ) : (
               <div className="flex flex-col items-center justify-center py-14 px-6 text-center gap-3">
                 <div className="bg-slate-100 rounded-full p-4"><MapPin className="w-8 h-8 text-slate-400" /></div>
-                {stateName ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-700">Map ready for <span className="text-primary font-semibold">{stateName}</span></p>
-                    <p className="text-xs text-slate-400">Add <code className="bg-slate-100 px-1 py-0.5 rounded">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to <code className="bg-slate-100 px-1 py-0.5 rounded">.env.local</code> to activate</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-400">Enter your location in the chat to activate the map</p>
-                )}
+                <p className="text-sm text-slate-400">Enter your location in the chat to activate the map</p>
               </div>
             )}
           </div>
@@ -490,11 +498,11 @@ export default function Home() {
           <div id="checklist-section" className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
             <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2"><Info className="w-5 h-5 text-slate-600" /><h3 className="font-semibold text-slate-800">Am I Ready to Vote?</h3></div>
-              <span className="text-xs font-semibold text-slate-500">{checkedCount} / 5 completed</span>
+              <span className="text-xs font-semibold text-slate-500">{checkedCount} / {CHECKLIST[lang].length} completed</span>
             </div>
-            <div className="h-1.5 bg-slate-100"><div className="h-full bg-primary transition-all duration-500 rounded-r-full" style={{ width: `${(checkedCount / 5) * 100}%` }} /></div>
+            <div className="h-1.5 bg-slate-100"><div className="h-full bg-primary transition-all duration-500 rounded-r-full" style={{ width: `${(checkedCount / CHECKLIST[lang].length) * 100}%` }} /></div>
             <div className="p-6 space-y-2">
-              {checkedCount === 5 && (
+              {checkedCount === CHECKLIST[lang].length && (
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-4 py-3 text-sm font-medium text-center mb-3">
                   🎉 You&apos;re ready to vote!
                 </div>
@@ -511,20 +519,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Status Overview */}
-          <div id="status-overview" className="bg-white border border-slate-200 shadow-sm rounded-md overflow-hidden">
-            <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
-               <Info className="w-5 h-5 text-slate-600" />
-               <h3 className="font-semibold text-slate-800">Status Overview</h3>
-            </div>
-            <div className="p-6 text-sm text-slate-600 flex flex-col items-center justify-center py-12">
-               {!isDataLoaded ? (
-                 <p>Tell the assistant your state or city (e.g. &quot;Maharashtra&quot; or &quot;Bengaluru&quot;) to load your voter information.</p>
-               ) : (
-                 <p className="text-center text-primary font-medium">Your state/city profile has been loaded. Check the cards above for your election details.</p>
-               )}
-            </div>
-          </div>
 
         </section>
 
@@ -566,12 +560,13 @@ export default function Home() {
                 type="text" 
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Enter your state or city (e.g. Maharashtra, Delhi)..." 
+                placeholder="Type your state or city..." 
                 disabled={isLoading}
                 className="w-full pl-3 pr-10 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm text-slate-800 bg-white disabled:opacity-50"
               />
               <button 
                 type="submit" 
+                aria-label="Send message"
                 disabled={isLoading || !inputValue.trim()}
                 className="absolute right-2 p-1.5 text-primary hover:bg-slate-200 rounded-md transition-colors disabled:opacity-50"
               >
