@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   // 1. Guard: API key must be present
   if (!process.env.GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY is missing from environment variables.");
-    return NextResponse.json({ error: "Server misconfiguration: GEMINI_API_KEY is not set." }, { status: 500 });
+    return NextResponse.json({ error: "The assistant is currently unavailable due to a configuration issue. Please try again later." }, { status: 500 });
   }
 
   try {
@@ -39,10 +39,10 @@ export async function POST(req: Request) {
 
     const latestMessage = messages[messages.length - 1].content;
 
-    // 3. Get the model — gemini-2.5-flash requires SDK >= 0.21.0
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: `You are a professional, authoritative, and helpful Civic Assistant for India's official election information website, powered by the Election Commission of India (ECI).
+    // 3. Define fallback models in order of preference (highest free-tier quota first)
+    // gemini-2.0-flash: 1500 RPD free | gemini-2.0-flash-lite: 1500 RPD free | gemini-2.5-flash: 20 RPD free
+    const modelsToTry = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"];
+    const systemInstruction = `You are a professional, authoritative, and helpful Civic Assistant for India's official election information website, powered by the Election Commission of India (ECI).
 Your goal is to help Indian citizens find accurate election information for their state or city.
 
 IMPORTANT RULES:
@@ -70,22 +70,46 @@ IMPORTANT RULES:
 }
 \`\`\`
 Use real or best-estimate dates for the timeline based on the state's known election schedule. If exact dates are unknown, provide approximate dates based on typical ECI election schedules.
-Keep your conversational response brief, professional, and clear. Rely on the JSON block to display the structured data. Always mention Voter Helpline 1950 and https://voters.eci.gov.in as key resources.${languageInstruction}`,
-    });
+Keep your conversational response brief, professional, and clear. Rely on the JSON block to display the structured data. Always mention Voter Helpline 1950 and https://voters.eci.gov.in as key resources.${languageInstruction}`;
 
-    // 4. Start chat session with history and send the latest message
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(latestMessage);
-    const responseText = result.response.text();
+    let responseText = "";
+    let lastError = null;
+
+    // 4. Start chat session with history and send the latest message using a fallback loop
+    for (const modelName of modelsToTry) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemInstruction,
+        });
+
+        const chat = model.startChat({ history });
+        const result = await chat.sendMessage(latestMessage);
+        responseText = result.response.text();
+        
+        // Success! Clear error and break out of the fallback loop
+        lastError = null;
+        break;
+      } catch (err: any) {
+        console.warn(`Model ${modelName} failed:`, err?.message || err);
+        lastError = err;
+        // Continue to the next model in the array
+      }
+    }
+
+    if (lastError) {
+      // If all models in the fallback array failed, throw the last error
+      throw lastError;
+    }
 
     return NextResponse.json({ message: responseText });
 
   } catch (error: any) {
-    // 5. Expose the real error message in dev — helps debugging model/API issues
+    // 5. Log the real error to console for debugging, but return a friendly message to UI
     const errorMessage = error?.message || "Unknown error occurred.";
     console.error("Gemini Chat API Error:", errorMessage, error);
     return NextResponse.json(
-      { error: `Gemini API Error: ${errorMessage}` },
+      { error: "I am currently experiencing high traffic and cannot fetch the details right now. Please try again in a few moments." },
       { status: 500 }
     );
   }

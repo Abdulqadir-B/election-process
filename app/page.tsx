@@ -126,13 +126,17 @@ export default function Home() {
       let data: any;
       try {
         data = await response.json();
-      } catch {
-        throw new Error(`Server returned an unreadable response (HTTP ${response.status}). Try restarting the dev server.`);
+      } catch (parseErr) {
+        console.error("Failed to parse server response:", parseErr);
+        setMessages(prev => [...prev, { role: 'system', content: "I'm having trouble connecting right now. Please try again in a moment." }]);
+        setIsLoading(false);
+        return;
       }
 
       // Server returned a structured error (e.g. Gemini quota, model error, missing key)
       if (data.error) {
-        setMessages(prev => [...prev, { role: 'system', content: `⚠️ ${data.error}` }]);
+        console.error("API error response:", data.error);
+        setMessages(prev => [...prev, { role: 'system', content: data.error }]);
         setIsLoading(false);
         return;
       }
@@ -168,10 +172,9 @@ export default function Home() {
       setMessages(prev => [...prev, { role: 'system', content: aiText }]);
       
     } catch (error: any) {
-      // This fires for true network failures or the JSON parse error above
-      const msg = error?.message || 'An unexpected error occurred.';
-      console.error("Chat fetch error:", msg, error);
-      setMessages(prev => [...prev, { role: 'system', content: `⚠️ ${msg}` }]);
+      // Network-level failure — log details, show friendly message
+      console.error("Chat fetch error:", error?.message || error);
+      setMessages(prev => [...prev, { role: 'system', content: "I'm having trouble connecting right now. Please try again in a moment." }]);
     } finally {
       setIsLoading(false);
     }
