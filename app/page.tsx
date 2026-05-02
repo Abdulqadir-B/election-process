@@ -14,7 +14,7 @@ export default function Home() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'system', content: 'Welcome to the India Election Assistant, powered by the Election Commission of India (ECI). I can help you find your polling booth, voter registration deadlines, and ID requirements. Which Indian state or city are you from?' }
+    { role: 'system', content: 'Welcome to the Election Assistant. I can help you find your polling booth, voter registration deadlines, and ID requirements. Which state or city are you from?' }
   ]);
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     pollingLocation: 'Awaiting your state or city.',
@@ -23,12 +23,18 @@ export default function Home() {
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Skip scroll on initial mount — only scroll when new messages are added
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     scrollToBottom();
   }, [messages]);
 
@@ -100,12 +106,128 @@ export default function Home() {
     }
   };
 
+  // --- Helpers ---
+
+  // Makes URLs in text clickable links
+  const linkify = (text: string, linkClass: string): React.ReactNode[] => {
+    const urlPattern = /((?:https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9-]+\.(?:gov\.in|nic\.in|in|com|org)(?:\/[^\s]*)?)/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    urlPattern.lastIndex = 0;
+    while ((match = urlPattern.exec(text)) !== null) {
+      if (match.index > lastIndex) result.push(text.slice(lastIndex, match.index));
+      const href = /^https?:\/\//.test(match[0]) ? match[0] : `https://${match[0]}`;
+      const displayText = match[0].replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+      result.push(
+        <a key={match.index} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          {displayText}
+        </a>
+      );
+      lastIndex = urlPattern.lastIndex;
+    }
+    if (lastIndex < text.length) result.push(text.slice(lastIndex));
+    return result;
+  };
+
+  // Renders card text — splits by sentences into bullets,
+  // and if there's a colon followed by comma-separated items, renders them as a tag list
+  const TextBullets = ({ text }: { text: string }) => {
+    if (text.startsWith('Awaiting')) return <p className="text-sm text-slate-400 italic">{text}</p>;
+
+    // Detect "intro text: item1, item2, item3..." pattern (for ID lists etc.)
+    const colonIdx = text.lastIndexOf(':');
+    if (colonIdx > -1) {
+      const intro = text.slice(0, colonIdx + 1).trim();
+      const rest = text.slice(colonIdx + 1).trim();
+      const commaItems = rest
+        .split(',')
+        .map(s => s.replace(/\.$/, '').trim())
+        .filter(s => s.length > 1 && !/^etc\.?$/i.test(s) && !/^and$/i.test(s));
+      if (commaItems.length > 2) {
+        return (
+          <div className="space-y-2">
+            <p className="text-sm text-slate-700 leading-relaxed">{linkify(intro, 'text-primary underline hover:opacity-80')}</p>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {commaItems.map((item, i) => (
+                <span key={i} className="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-md border border-slate-200">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      }
+    }
+
+    // Fallback: split by sentence boundaries
+    const bullets = text.split(/(?<=\.)\s+/).map(s => s.trim()).filter(s => s.length > 2);
+    if (bullets.length <= 1) return <p className="text-sm text-slate-700 leading-relaxed">{linkify(text, 'text-primary underline hover:opacity-80')}</p>;
+
+    return (
+      <ul className="space-y-1.5 mt-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+            <span className="leading-relaxed">{linkify(b, 'text-primary underline hover:opacity-80')}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  // Renders chat message text — handles numbered lists, bullet lines, newlines, and URLs
+  const ChatContent = ({ text, isUser }: { text: string; isUser: boolean }) => {
+    const linkClass = isUser ? 'underline text-white/90 hover:text-white' : 'text-primary underline hover:opacity-80';
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    const isListLine = (l: string) => /^(\d+\.|[-•*])\s/.test(l);
+    const hasLists = lines.some(isListLine);
+
+    if (hasLists) {
+      return (
+        <div className="space-y-1.5">
+          {lines.map((line, i) => {
+            const clean = line.replace(/^(\d+\.|[-•*])\s+/, '').trim();
+            if (isListLine(line)) {
+              return (
+                <div key={i} className="flex items-start gap-2 text-sm">
+                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${isUser ? 'bg-white/70' : 'bg-primary'}`} />
+                  <span className={isUser ? 'text-white leading-relaxed' : 'text-slate-700 leading-relaxed'}>
+                    {linkify(clean, linkClass)}
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <p key={i} className={`text-sm leading-relaxed ${isUser ? 'text-white' : 'text-slate-700'}`}>
+                {linkify(line, linkClass)}
+              </p>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Plain text — render line by line with link detection
+    return (
+      <div className="space-y-1">
+        {lines.map((line, i) => (
+          <p key={i} className={`text-sm leading-relaxed ${isUser ? 'text-white' : 'text-slate-700'}`}>
+            {linkify(line, linkClass)}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+
   return (
-    <main className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Official Government Banner */}
+    <main className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
+      {/* Top Banner */}
       <div className="bg-slate-900 text-slate-100 text-xs py-2 px-6 flex items-center gap-2">
         <Flag className="w-4 h-4 text-slate-300" />
-        <span>An official election assistant website</span>
+        <span>An election information guide for voters</span>
       </div>
 
       {/* Main Header */}
@@ -115,8 +237,8 @@ export default function Home() {
             <Bot className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-bold text-xl text-primary leading-tight">India Election Assistant</h1>
-            <p className="text-sm text-slate-500">Powered by Election Commission of India (ECI)</p>
+            <h1 className="font-bold text-xl text-primary leading-tight">Civic Election Assistant</h1>
+            <p className="text-sm text-slate-500">Your Election Information Guide</p>
           </div>
         </div>
       </header>
@@ -131,10 +253,10 @@ export default function Home() {
       </div>
 
       {/* Two Column Layout */}
-      <div className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-8">
+      <div className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-8 overflow-hidden">
         
         {/* LEFT MAIN AREA: Dashboard (70%) */}
-        <section className="flex-[7] space-y-8">
+        <section className="flex-[7] space-y-8 overflow-y-auto pr-2">
           <div className="border-b border-slate-200 pb-4">
             <h2 className="text-3xl font-bold text-slate-800">Your Election Dashboard</h2>
             <p className="text-slate-600 mt-2 max-w-2xl">
@@ -143,28 +265,37 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-white border-t-4 border-t-primary border-x border-b border-slate-200 shadow-sm p-6 rounded-b-md relative flex flex-col">
-              <div className="flex items-start gap-4 mb-2">
-                <MapPin className="w-6 h-6 text-primary flex-shrink-0" />
-                <h3 className="font-semibold text-slate-800">Polling Location</h3>
+            {/* Polling Location Card */}
+            <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 shadow-md rounded-xl p-6 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/10 p-2 rounded-lg">
+                  <MapPin className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">Polling Location</h3>
               </div>
-              <p className="text-sm text-slate-600 mt-1 flex-1">{dashboardData.pollingLocation}</p>
+              <TextBullets text={dashboardData.pollingLocation} />
             </div>
 
-            <div className="bg-white border-t-4 border-t-primary border-x border-b border-slate-200 shadow-sm p-6 rounded-b-md relative flex flex-col">
-              <div className="flex items-start gap-4 mb-2">
-                <Calendar className="w-6 h-6 text-primary flex-shrink-0" />
-                <h3 className="font-semibold text-slate-800">Key Deadlines</h3>
+            {/* Key Deadlines Card */}
+            <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 shadow-md rounded-xl p-6 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-500/10 p-2 rounded-lg">
+                  <Calendar className="w-5 h-5 text-amber-600" />
+                </div>
+                <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">Key Deadlines</h3>
               </div>
-              <p className="text-sm text-slate-600 mt-1 flex-1">{dashboardData.deadlines}</p>
+              <TextBullets text={dashboardData.deadlines} />
             </div>
 
-            <div className="bg-white border-t-4 border-t-primary border-x border-b border-slate-200 shadow-sm p-6 rounded-b-md relative flex flex-col">
-              <div className="flex items-start gap-4 mb-2">
-                <FileText className="w-6 h-6 text-primary flex-shrink-0" />
-                <h3 className="font-semibold text-slate-800">ID Requirements</h3>
+            {/* ID Requirements Card */}
+            <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 shadow-md rounded-xl p-6 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-500/10 p-2 rounded-lg">
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                </div>
+                <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">ID Requirements</h3>
               </div>
-              <p className="text-sm text-slate-600 mt-1 flex-1">{dashboardData.idRequirements}</p>
+              <TextBullets text={dashboardData.idRequirements} />
             </div>
           </div>
 
@@ -176,7 +307,7 @@ export default function Home() {
             </div>
             <div className="p-6 text-sm text-slate-600 flex flex-col items-center justify-center py-12">
                {dashboardData.pollingLocation === 'Awaiting your state or city.' ? (
-                 <p>Tell the assistant your Indian state or city (e.g. &quot;Maharashtra&quot; or &quot;Bengaluru&quot;) to load your voter information.</p>
+                 <p>Tell the assistant your state or city (e.g. &quot;Maharashtra&quot; or &quot;Bengaluru&quot;) to load your voter information.</p>
                ) : (
                  <p className="text-center text-primary font-medium">Your state/city profile has been loaded. Check the cards above for your election details.</p>
                )}
@@ -186,7 +317,7 @@ export default function Home() {
         </section>
 
         {/* RIGHT SIDEBAR: Chat Interface (30%) */}
-        <aside className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-[600px] sticky top-8">
+        <aside className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-full">
           <header className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 flex items-center gap-2">
                <Bot className="w-5 h-5 text-primary" />
@@ -195,11 +326,18 @@ export default function Home() {
           </header>
 
           {/* Chat Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
             {messages.map((msg, idx) => (
-              <div key={idx} className={msg.role === 'system' ? "bg-slate-50 p-4 rounded-md border border-slate-200 text-sm" : "bg-primary text-white p-4 rounded-md text-sm ml-8"}>
-                {msg.role === 'system' && <p className="font-semibold text-slate-800 mb-1">System</p>}
-                <p className={msg.role === 'system' ? "text-slate-600" : "text-white"}>{msg.content}</p>
+              <div key={idx} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                <div className={msg.role === 'user'
+                  ? 'bg-primary text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] text-sm leading-relaxed'
+                  : 'bg-slate-50 border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[90%] text-sm'
+                }>
+                  {msg.role === 'system' && (
+                    <p className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-1.5">Assistant</p>
+                  )}
+                  <ChatContent text={msg.content} isUser={msg.role === 'user'} />
+                </div>
               </div>
             ))}
             {isLoading && (

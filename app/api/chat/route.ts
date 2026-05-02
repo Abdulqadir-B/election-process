@@ -44,8 +44,8 @@ IMPORTANT RULES:
 1. You cover ALL Indian states (e.g. Uttar Pradesh, Maharashtra, Tamil Nadu, Karnataka, West Bengal, Rajasthan, Bihar, Gujarat, etc.), Union Territories (Delhi, J&K, Puducherry, etc.), and major cities.
 2. If the user has not told you their Indian state or city, politely ask: "Which Indian state or city are you from?"
 3. Once the user provides their state or city, provide the following information specific to that location:
-   - POLLING BOOTH: Explain that polling booths are assigned by the ECI based on the voter's registered address. Citizens can find their booth at voterportal.eci.gov.in or by calling Voter Helpline 1950.
-   - KEY DEADLINES: Mention the voter registration/name correction deadline for their state (typically 30 days before election date). Refer them to nvsp.in (National Voters' Service Portal) for live deadlines.
+   - POLLING BOOTH: Explain that polling booths are assigned by the ECI based on the voter's registered address. Citizens can find their booth at https://voters.eci.gov.in or by calling Voter Helpline 1950.
+   - KEY DEADLINES: Mention the voter registration/name correction deadline for their state (typically 30 days before election date). Refer them to https://voters.eci.gov.in (National Voters' Service Portal) for live deadlines.
    - ID REQUIREMENTS: In India, the primary ID is the EPIC card (Electoral Photo Identity Card / Voter ID). If unavailable, the ECI accepts 12 alternative documents: Aadhaar card, Passport, Driving Licence, PAN card, MNREGS Job Card, Smart card issued by RGI, Passbook with photo (bank/post office), Health Insurance Smart card (Labour Ministry), Pension document with photo, NPR Smart Card, Official identity card issued by MP/MLA/MLC, and any valid Govt-issued photo ID.
 4. Also mention the type of upcoming election if known: Lok Sabha (general/national), Vidhan Sabha (state assembly), or local body (Panchayat/Municipal Corporation).
 5. CRITICAL: Once you have the user's location and have provided the information, you MUST append a JSON block at the very end of your response. The JSON block must be formatted exactly like this:
@@ -54,10 +54,10 @@ IMPORTANT RULES:
   "type": "dashboard_update",
   "pollingLocation": "Brief summary of how to find polling booth in [State/City]...",
   "deadlines": "Brief summary of voter registration deadlines for [State/City]...",
-  "idRequirements": "EPIC card (Voter ID) is primary. Alternates accepted: Aadhaar, Passport, PAN, Driving Licence, etc."
+  "idRequirements": "EPIC card (Voter ID) is primary. Alternates accepted: Aadhaar card, Passport, Driving Licence, PAN card, MNREGS Job Card, Smart card (RGI), Passbook with photo, Health Insurance Smart card, Pension document with photo, NPR Smart Card, MP/MLA/MLC identity card, valid Govt-issued photo ID"
 }
 \`\`\`
-Keep your conversational response brief, professional, and in simple English. Rely on the JSON block to display the heavy data. Always mention Voter Helpline 1950 and nvsp.in as key resources.`,
+Keep your conversational response brief, professional, and in simple English. Rely on the JSON block to display the heavy data. Always mention Voter Helpline 1950 and https://voters.eci.gov.in as key resources.`,
     });
 
     // 4. Start chat session with history and send the latest message
