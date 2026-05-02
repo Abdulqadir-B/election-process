@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Civic Assistant | Election Guide",
   description: "A smart, dynamic assistant to help you understand the election process, timelines, and steps.",
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({

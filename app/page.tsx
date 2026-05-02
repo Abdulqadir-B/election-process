@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2, CheckCircle2, Circle, Printer, Globe } from 'lucide-react';
+import { Vote, Landmark, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2, CheckCircle2, Circle, Printer, Globe } from 'lucide-react';
 
 type Message = { role: 'user' | 'system'; content: string };
 type DashboardData = { pollingLocation: string; deadlines: string; idRequirements: string };
@@ -65,6 +65,14 @@ export default function Home() {
     setDashboardData({ pollingLocation: AWAITING, deadlines: AWAITING, idRequirements: AWAITING });
     setTimeline([]);
     setStateName('');
+  };
+
+  const handleHomeClick = () => {
+    setMessages([{ role: 'system', content: WELCOME[lang] }]);
+    setDashboardData({ pollingLocation: AWAITING, deadlines: AWAITING, idRequirements: AWAITING });
+    setTimeline([]);
+    setStateName('');
+    setInputValue('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -260,18 +268,6 @@ export default function Home() {
 
   return (
     <main id="app-root" className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          #top-banner, #main-header, #breadcrumbs, #chat-aside, #checklist-section { display: none !important; }
-          #app-root { height: auto !important; overflow: visible !important; }
-          #two-col { display: block !important; padding: 0 !important; }
-          #dashboard-section { overflow: visible !important; padding-right: 0 !important; }
-          #print-only { display: block !important; }
-        }
-        #print-only { display: none; }
-      `}</style>
-
       {/* Print-only header */}
       <div id="print-only" className="p-6 border-b border-slate-200">
         <h1 className="text-2xl font-bold text-slate-800">Civic Election Assistant — Voter Summary</h1>
@@ -298,7 +294,7 @@ export default function Home() {
       {/* Main Header */}
       <header id="main-header" className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="bg-primary text-white p-2 rounded-md"><Bot className="w-6 h-6" /></div>
+          <div className="bg-primary text-white p-2 rounded-md"><Vote className="w-6 h-6" /></div>
           <div>
             <h1 className="font-bold text-xl text-primary leading-tight">Civic Election Assistant</h1>
             <p className="text-sm text-slate-500">Your Election Information Guide</p>
@@ -311,12 +307,23 @@ export default function Home() {
       </header>
 
       {/* Breadcrumbs */}
-      <div id="breadcrumbs" className="px-6 md:px-8 py-4 text-sm text-slate-500 flex items-center gap-2">
-        <span className="hover:underline cursor-pointer text-primary">Home</span>
-        <ChevronRight className="w-4 h-4" />
-        <span className="hover:underline cursor-pointer text-primary">Voter Information</span>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-slate-700 font-medium">{stateName ? `${stateName} Profile` : 'Your State / City Profile'}</span>
+      <div id="breadcrumbs" className="px-6 md:px-8 py-4 text-sm flex items-center gap-2">
+        <button 
+          onClick={handleHomeClick} 
+          disabled={!stateName}
+          className={`transition-colors focus:outline-none ${!stateName ? 'text-slate-800 font-semibold cursor-default' : 'text-slate-500 hover:text-primary cursor-pointer hover:underline'}`}
+        >
+          Home
+        </button>
+        {stateName && (
+          <>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <div className="flex items-center gap-1.5 text-primary font-semibold bg-primary/10 px-2.5 py-1 rounded-md">
+              <MapPin className="w-3.5 h-3.5" />
+              {stateName} Profile
+            </div>
+          </>
+        )}
       </div>
 
       {/* Two Column Layout */}
@@ -324,7 +331,7 @@ export default function Home() {
 
         {/* LEFT MAIN AREA: Dashboard (70%) */}
         <section id="dashboard-section" className="flex-[7] space-y-6 overflow-y-auto pr-2">
-          <div className="border-b border-slate-200 pb-4">
+          <div className="border-b border-slate-200 pb-4 no-print">
             <h2 className="text-3xl font-bold text-slate-800">Your Election Dashboard</h2>
             <p className="text-slate-600 mt-2 max-w-2xl">
               Tell the assistant your Indian state or city to get your polling booth details, voter registration deadlines, and accepted ID documents.
@@ -368,7 +375,7 @@ export default function Home() {
 
 
           {/* Election Timeline */}
-          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+          <div id="timeline-section" className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
             <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-slate-600" />
               <h3 className="font-semibold text-slate-800">Election Timeline</h3>
@@ -397,14 +404,14 @@ export default function Home() {
           </div>
 
           {/* Google Maps Placeholder */}
-          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+          <div id="map-section" className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
             <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-slate-600" />
               <h3 className="font-semibold text-slate-800">Polling Area Map</h3>
             </div>
             {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && stateName ? (
               <iframe title="Polling Area Map" width="100%" height="280" className="border-0" referrerPolicy="no-referrer-when-downgrade"
-                src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(stateName + ' polling booth India')}`} />
+                src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(stateName + ', India')}`} />
             ) : (
               <div className="flex flex-col items-center justify-center py-14 px-6 text-center gap-3">
                 <div className="bg-slate-100 rounded-full p-4"><MapPin className="w-8 h-8 text-slate-400" /></div>
@@ -446,7 +453,7 @@ export default function Home() {
           </div>
 
           {/* Status Overview */}
-          <div className="bg-white border border-slate-200 shadow-sm rounded-md overflow-hidden">
+          <div id="status-overview" className="bg-white border border-slate-200 shadow-sm rounded-md overflow-hidden">
             <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
                <Info className="w-5 h-5 text-slate-600" />
                <h3 className="font-semibold text-slate-800">Status Overview</h3>
@@ -466,8 +473,8 @@ export default function Home() {
         <aside id="chat-aside" className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-full">
           <header className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-               <Bot className="w-5 h-5 text-primary" />
-               Support Assistant
+               <Landmark className="w-5 h-5 text-primary" />
+               Civic Assistant
             </h2>
           </header>
 
