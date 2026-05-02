@@ -37,6 +37,7 @@ export default function Home() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [stateName, setStateName] = useState('');
   const [checklist, setChecklist] = useState<boolean[]>([false, false, false, false, false]);
+  const [mobileTab, setMobileTab] = useState<'dashboard' | 'chat'>('chat');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
@@ -124,7 +125,10 @@ export default function Home() {
               idRequirements: parsed.idRequirements || 'No data found.',
             });
             if (Array.isArray(parsed.timeline)) setTimeline(parsed.timeline);
-            if (parsed.stateName) setStateName(parsed.stateName);
+            if (parsed.stateName) {
+              setStateName(parsed.stateName);
+              setMobileTab('dashboard'); // Auto-switch to details tab on mobile
+            }
           }
         } catch (e) {
           console.error("Failed to parse JSON from AI response", e);
@@ -275,13 +279,13 @@ export default function Home() {
       </div>
 
       {/* Top Banner with Language Switcher */}
-      <div id="top-banner" className="bg-slate-900 text-slate-100 text-xs py-2 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Flag className="w-4 h-4 text-slate-300" />
-          <span>An election information guide for voters</span>
+      <div id="top-banner" className="bg-slate-900 text-slate-100 text-xs py-2 px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0">
+        <div className="flex items-center gap-2 text-center sm:text-left">
+          <Flag className="w-4 h-4 text-slate-300 hidden sm:block" />
+          <span className="opacity-80 sm:opacity-100">An election information guide for voters</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Globe className="w-3.5 h-3.5 text-slate-400 mr-1" />
+        <div className="flex items-center gap-1 flex-wrap justify-center">
+          <Globe className="w-3.5 h-3.5 text-slate-400 mr-1 hidden sm:block" />
           {(['English', 'Hindi', 'Tamil', 'Telugu'] as Lang[]).map(l => (
             <button key={l} onClick={() => handleLangChange(l)}
               className={`px-2 py-0.5 rounded text-xs transition-colors ${lang === l ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'}`}>
@@ -292,16 +296,16 @@ export default function Home() {
       </div>
 
       {/* Main Header */}
-      <header id="main-header" className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+      <header id="main-header" className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0">
         <div className="flex items-center gap-3">
-          <div className="bg-primary text-white p-2 rounded-md"><Vote className="w-6 h-6" /></div>
+          <div className="bg-primary text-white p-2 rounded-md shrink-0"><Vote className="w-6 h-6" /></div>
           <div>
-            <h1 className="font-bold text-xl text-primary leading-tight">Civic Election Assistant</h1>
-            <p className="text-sm text-slate-500">Your Election Information Guide</p>
+            <h1 className="font-bold text-lg md:text-xl text-primary leading-tight">Civic Election Assistant</h1>
+            <p className="text-xs md:text-sm text-slate-500">Your Election Information Guide</p>
           </div>
         </div>
         <button onClick={() => window.print()} disabled={!isDataLoaded}
-          className="flex items-center gap-2 px-4 py-2 rounded-md border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2 rounded-md border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           <Printer className="w-4 h-4" />Print Summary
         </button>
       </header>
@@ -326,11 +330,25 @@ export default function Home() {
         )}
       </div>
 
+      {/* Mobile Tab Toggle */}
+      <div className="md:hidden flex border-b border-slate-200 bg-white no-print">
+         <button 
+           onClick={() => setMobileTab('chat')} 
+           className={`flex-1 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${mobileTab === 'chat' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-slate-500 hover:text-slate-700'}`}>
+           <Landmark className="w-4 h-4" /> Assistant
+         </button>
+         <button 
+           onClick={() => setMobileTab('dashboard')} 
+           className={`flex-1 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${mobileTab === 'dashboard' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-slate-500 hover:text-slate-700'}`}>
+           <Info className="w-4 h-4" /> Details
+         </button>
+      </div>
+
       {/* Two Column Layout */}
-      <div id="two-col" className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-8 overflow-hidden">
+      <div id="two-col" className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-4 md:gap-8 overflow-hidden">
 
         {/* LEFT MAIN AREA: Dashboard (70%) */}
-        <section id="dashboard-section" className="flex-[7] space-y-6 overflow-y-auto pr-2">
+        <section id="dashboard-section" className={`w-full md:flex-[7] h-full space-y-6 overflow-y-auto pr-1 md:pr-2 ${mobileTab === 'dashboard' ? 'block' : 'hidden md:block'}`}>
           <div className="border-b border-slate-200 pb-4 no-print">
             <h2 className="text-3xl font-bold text-slate-800">Your Election Dashboard</h2>
             <p className="text-slate-600 mt-2 max-w-2xl">
@@ -470,8 +488,8 @@ export default function Home() {
         </section>
 
         {/* RIGHT SIDEBAR: Chat Interface (30%) */}
-        <aside id="chat-aside" className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-full">
-          <header className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <aside id="chat-aside" className={`w-full md:flex-[3] md:min-w-[320px] md:max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex-col overflow-hidden h-full ${mobileTab === 'chat' ? 'flex' : 'hidden md:flex'}`}>
+          <header className="p-4 border-b border-slate-200 bg-slate-50 hidden md:flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 flex items-center gap-2">
                <Landmark className="w-5 h-5 text-primary" />
                Civic Assistant
