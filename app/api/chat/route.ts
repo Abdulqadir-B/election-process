@@ -12,11 +12,17 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, language } = await req.json();
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Invalid request: messages array is required." }, { status: 400 });
     }
+
+    // Language instruction appended to system prompt
+    const langName = language || "English";
+    const languageInstruction = langName === "English"
+      ? ""
+      : `\n\nLANGUAGE RULE: The user has selected ${langName} as their language. You MUST respond conversationally in ${langName}. However, the JSON block at the end must always be valid JSON with English keys — only the VALUES inside the JSON may be in ${langName}.`;
 
     // 2. Convert frontend messages to Gemini chat history format
     // History = all messages EXCEPT the latest one
@@ -26,7 +32,6 @@ export async function POST(req: Request) {
     }));
 
     // Gemini API requires chat history to START with a 'user' message
-
     // Strip any leading 'model' messages (e.g. the initial welcome message)
     while (history.length > 0 && history[0].role === 'model') {
       history.shift();
@@ -42,22 +47,30 @@ Your goal is to help Indian citizens find accurate election information for thei
 
 IMPORTANT RULES:
 1. You cover ALL Indian states (e.g. Uttar Pradesh, Maharashtra, Tamil Nadu, Karnataka, West Bengal, Rajasthan, Bihar, Gujarat, etc.), Union Territories (Delhi, J&K, Puducherry, etc.), and major cities.
-2. If the user has not told you their Indian state or city, politely ask: "Which Indian state or city are you from?"
+2. If the user has not told you their Indian state or city, politely ask which state or city they are from.
 3. Once the user provides their state or city, provide the following information specific to that location:
    - POLLING BOOTH: Explain that polling booths are assigned by the ECI based on the voter's registered address. Citizens can find their booth at https://voters.eci.gov.in or by calling Voter Helpline 1950.
-   - KEY DEADLINES: Mention the voter registration/name correction deadline for their state (typically 30 days before election date). Refer them to https://voters.eci.gov.in (National Voters' Service Portal) for live deadlines.
+   - KEY DEADLINES: Mention the voter registration/name correction deadline for their state (typically 30 days before election date). Refer them to https://voters.eci.gov.in for live deadlines.
    - ID REQUIREMENTS: In India, the primary ID is the EPIC card (Electoral Photo Identity Card / Voter ID). If unavailable, the ECI accepts 12 alternative documents: Aadhaar card, Passport, Driving Licence, PAN card, MNREGS Job Card, Smart card issued by RGI, Passbook with photo (bank/post office), Health Insurance Smart card (Labour Ministry), Pension document with photo, NPR Smart Card, Official identity card issued by MP/MLA/MLC, and any valid Govt-issued photo ID.
 4. Also mention the type of upcoming election if known: Lok Sabha (general/national), Vidhan Sabha (state assembly), or local body (Panchayat/Municipal Corporation).
 5. CRITICAL: Once you have the user's location and have provided the information, you MUST append a JSON block at the very end of your response. The JSON block must be formatted exactly like this:
 \`\`\`json
 {
   "type": "dashboard_update",
+  "stateName": "Name of the state or city the user mentioned",
   "pollingLocation": "Brief summary of how to find polling booth in [State/City]...",
   "deadlines": "Brief summary of voter registration deadlines for [State/City]...",
-  "idRequirements": "EPIC card (Voter ID) is primary. Alternates accepted: Aadhaar card, Passport, Driving Licence, PAN card, MNREGS Job Card, Smart card (RGI), Passbook with photo, Health Insurance Smart card, Pension document with photo, NPR Smart Card, MP/MLA/MLC identity card, valid Govt-issued photo ID"
+  "idRequirements": "EPIC card (Voter ID) is primary. Alternates accepted: Aadhaar card, Passport, Driving Licence, PAN card, MNREGS Job Card, Smart card (RGI), Passbook with photo, Health Insurance Smart card, Pension document with photo, NPR Smart Card, MP/MLA/MLC identity card, valid Govt-issued photo ID",
+  "timeline": [
+    { "date": "YYYY-MM-DD", "event": "Voter Registration Deadline" },
+    { "date": "YYYY-MM-DD", "event": "Last Date for Name Correction" },
+    { "date": "YYYY-MM-DD", "event": "Election Day" },
+    { "date": "YYYY-MM-DD", "event": "Result Declaration" }
+  ]
 }
 \`\`\`
-Keep your conversational response brief, professional, and in simple English. Rely on the JSON block to display the heavy data. Always mention Voter Helpline 1950 and https://voters.eci.gov.in as key resources.`,
+Use real or best-estimate dates for the timeline based on the state's known election schedule. If exact dates are unknown, provide approximate dates based on typical ECI election schedules.
+Keep your conversational response brief, professional, and clear. Rely on the JSON block to display the structured data. Always mention Voter Helpline 1950 and https://voters.eci.gov.in as key resources.${languageInstruction}`,
     });
 
     // 4. Start chat session with history and send the latest message

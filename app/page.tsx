@@ -1,42 +1,71 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2 } from 'lucide-react';
+import { Bot, MapPin, Calendar, FileText, Send, Flag, ChevronRight, Info, Loader2, CheckCircle2, Circle, Printer, Globe } from 'lucide-react';
 
 type Message = { role: 'user' | 'system'; content: string };
-type DashboardData = {
-  pollingLocation: string;
-  deadlines: string;
-  idRequirements: string;
+type DashboardData = { pollingLocation: string; deadlines: string; idRequirements: string };
+type TimelineItem = { date: string; event: string };
+type Lang = 'English' | 'Hindi' | 'Tamil' | 'Telugu';
+
+const AWAITING = 'Awaiting your state or city.';
+
+const LANG_LABELS: Record<Lang, string> = {
+  English: 'English', Hindi: 'हिन्दी', Tamil: 'தமிழ்', Telugu: 'తెలుగు',
+};
+
+const WELCOME: Record<Lang, string> = {
+  English: 'Welcome to the Election Assistant. I can help you find your polling booth, voter registration deadlines, and ID requirements. Which state or city are you from?',
+  Hindi: 'चुनाव सहायक में आपका स्वागत है। मैं आपको मतदान केंद्र, पंजीकरण की अंतिम तिथि और आवश्यक दस्तावेज़ जानने में मदद कर सकता हूँ। आप किस राज्य या शहर से हैं?',
+  Tamil: 'தேர்தல் உதவியாளரில் வரவேற்கிறோம். உங்கள் மாநிலம் அல்லது நகரத்தை கூறுங்கள்.',
+  Telugu: 'ఎన్నికల సహాయకుడికి స్వాగతం. మీ రాష్ట్రం లేదా నగరాన్ని చెప్పండి.',
+};
+
+const CHECKLIST: Record<Lang, string[]> = {
+  English: ['I have my EPIC / Voter ID card', 'I know my polling booth location', "I've verified my name in the voter list", 'I know the election date', "I've arranged transport to the polling booth"],
+  Hindi: ['मेरे पास EPIC / मतदाता पहचान पत्र है', 'मुझे मतदान केंद्र का पता है', 'मैंने मतदाता सूची में नाम सत्यापित किया है', 'मुझे चुनाव की तारीख पता है', 'मैंने परिवहन की व्यवस्था की है'],
+  Tamil: ['என்னிடம் EPIC / வாக்காளர் அட்டை உள்ளது', 'வாக்குசாவடி இடம் தெரியும்', 'வாக்காளர் பட்டியலில் பெயர் சரிபார்த்தேன்', 'தேர்தல் தேதி தெரியும்', 'பயண ஏற்பாடு செய்தேன்'],
+  Telugu: ['నా దగ్గర EPIC / ఓటరు కార్డు ఉంది', 'పోలింగ్ బూత్ స్థానం తెలుసు', 'ఓటరు జాబితాలో పేరు ధృవీకరించాను', 'ఎన్నికల తేదీ తెలుసు', 'రవాణా ఏర్పాటు చేసాను'],
 };
 
 export default function Home() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'system', content: 'Welcome to the Election Assistant. I can help you find your polling booth, voter registration deadlines, and ID requirements. Which state or city are you from?' }
-  ]);
-  const [dashboardData, setDashboardData] = useState<DashboardData>({
-    pollingLocation: 'Awaiting your state or city.',
-    deadlines: 'Awaiting your state or city.',
-    idRequirements: 'Awaiting your state or city.'
-  });
+  const [lang, setLang] = useState<Lang>('English');
+  const [messages, setMessages] = useState<Message[]>([{ role: 'system', content: WELCOME['English'] }]);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({ pollingLocation: AWAITING, deadlines: AWAITING, idRequirements: AWAITING });
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [stateName, setStateName] = useState('');
+  const [checklist, setChecklist] = useState<boolean[]>([false, false, false, false, false]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Skip scroll on initial mount — only scroll when new messages are added
+  // Load checklist from localStorage on mount
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    scrollToBottom();
+    try { const s = localStorage.getItem('voterChecklist'); if (s) setChecklist(JSON.parse(s)); } catch {}
+  }, []);
+
+  // Persist checklist to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('voterChecklist', JSON.stringify(checklist));
+  }, [checklist]);
+
+  // Skip scroll on initial mount — only scroll when new messages arrive
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Language switch — resets chat and dashboard
+  const handleLangChange = (l: Lang) => {
+    if (l === lang) return;
+    setLang(l);
+    setMessages([{ role: 'system', content: WELCOME[l] }]);
+    setDashboardData({ pollingLocation: AWAITING, deadlines: AWAITING, idRequirements: AWAITING });
+    setTimeline([]);
+    setStateName('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +82,7 @@ export default function Home() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: currentMessages })
+        body: JSON.stringify({ messages: currentMessages, language: lang })
       });
 
       // Safely parse JSON — if server returns an HTML error page this won't crash
@@ -72,11 +101,11 @@ export default function Home() {
       }
 
       let aiText = data.message;
-      
+
       // Look for JSON block in the response
       const jsonRegex = /```json\n([\s\S]*?)\n```/;
       const match = aiText.match(jsonRegex);
-      
+
       if (match && match[1]) {
         try {
           const parsed = JSON.parse(match[1]);
@@ -84,8 +113,10 @@ export default function Home() {
             setDashboardData({
               pollingLocation: parsed.pollingLocation || 'No data found.',
               deadlines: parsed.deadlines || 'No data found.',
-              idRequirements: parsed.idRequirements || 'No data found.'
+              idRequirements: parsed.idRequirements || 'No data found.',
             });
+            if (Array.isArray(parsed.timeline)) setTimeline(parsed.timeline);
+            if (parsed.stateName) setStateName(parsed.stateName);
           }
         } catch (e) {
           console.error("Failed to parse JSON from AI response", e);
@@ -222,41 +253,77 @@ export default function Home() {
   };
 
 
+  const isDataLoaded = dashboardData.pollingLocation !== AWAITING;
+  const checkedCount = checklist.filter(Boolean).length;
+  const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return d; } };
+  const isPast = (d: string) => { try { return new Date(d) < new Date(); } catch { return false; } };
+
   return (
-    <main className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
-      {/* Top Banner */}
-      <div className="bg-slate-900 text-slate-100 text-xs py-2 px-6 flex items-center gap-2">
-        <Flag className="w-4 h-4 text-slate-300" />
-        <span>An election information guide for voters</span>
+    <main id="app-root" className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          #top-banner, #main-header, #breadcrumbs, #chat-aside, #checklist-section { display: none !important; }
+          #app-root { height: auto !important; overflow: visible !important; }
+          #two-col { display: block !important; padding: 0 !important; }
+          #dashboard-section { overflow: visible !important; padding-right: 0 !important; }
+          #print-only { display: block !important; }
+        }
+        #print-only { display: none; }
+      `}</style>
+
+      {/* Print-only header */}
+      <div id="print-only" className="p-6 border-b border-slate-200">
+        <h1 className="text-2xl font-bold text-slate-800">Civic Election Assistant — Voter Summary</h1>
+        <p className="text-sm text-slate-500 mt-1">Printed on {new Date().toLocaleDateString('en-IN')}{stateName ? ` · Location: ${stateName}` : ''}</p>
+      </div>
+
+      {/* Top Banner with Language Switcher */}
+      <div id="top-banner" className="bg-slate-900 text-slate-100 text-xs py-2 px-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Flag className="w-4 h-4 text-slate-300" />
+          <span>An election information guide for voters</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Globe className="w-3.5 h-3.5 text-slate-400 mr-1" />
+          {(['English', 'Hindi', 'Tamil', 'Telugu'] as Lang[]).map(l => (
+            <button key={l} onClick={() => handleLangChange(l)}
+              className={`px-2 py-0.5 rounded text-xs transition-colors ${lang === l ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'}`}>
+              {LANG_LABELS[l]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Main Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+      <header id="main-header" className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="bg-primary text-white p-2 rounded-md">
-            <Bot className="w-6 h-6" />
-          </div>
+          <div className="bg-primary text-white p-2 rounded-md"><Bot className="w-6 h-6" /></div>
           <div>
             <h1 className="font-bold text-xl text-primary leading-tight">Civic Election Assistant</h1>
             <p className="text-sm text-slate-500">Your Election Information Guide</p>
           </div>
         </div>
+        <button onClick={() => window.print()} disabled={!isDataLoaded}
+          className="flex items-center gap-2 px-4 py-2 rounded-md border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <Printer className="w-4 h-4" />Print Summary
+        </button>
       </header>
 
       {/* Breadcrumbs */}
-      <div className="px-6 md:px-8 py-4 text-sm text-slate-500 flex items-center gap-2">
+      <div id="breadcrumbs" className="px-6 md:px-8 py-4 text-sm text-slate-500 flex items-center gap-2">
         <span className="hover:underline cursor-pointer text-primary">Home</span>
         <ChevronRight className="w-4 h-4" />
         <span className="hover:underline cursor-pointer text-primary">Voter Information</span>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-slate-700 font-medium">Your State / City Profile</span>
+        <span className="text-slate-700 font-medium">{stateName ? `${stateName} Profile` : 'Your State / City Profile'}</span>
       </div>
 
       {/* Two Column Layout */}
-      <div className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-8 overflow-hidden">
-        
+      <div id="two-col" className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-8 overflow-hidden">
+
         {/* LEFT MAIN AREA: Dashboard (70%) */}
-        <section className="flex-[7] space-y-8 overflow-y-auto pr-2">
+        <section id="dashboard-section" className="flex-[7] space-y-6 overflow-y-auto pr-2">
           <div className="border-b border-slate-200 pb-4">
             <h2 className="text-3xl font-bold text-slate-800">Your Election Dashboard</h2>
             <p className="text-slate-600 mt-2 max-w-2xl">
@@ -299,14 +366,93 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Structured Information Table Area */}
-          <div className="bg-white border border-slate-200 shadow-sm rounded-md overflow-hidden mt-8">
+
+          {/* Election Timeline */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+            <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-slate-600" />
+              <h3 className="font-semibold text-slate-800">Election Timeline</h3>
+            </div>
+            {timeline.length === 0 ? (
+              <div className="p-6 text-sm text-slate-400 italic text-center py-10">Awaiting your location to load election dates...</div>
+            ) : (
+              <div className="p-6">
+                <ol className="relative border-l-2 border-slate-200 space-y-6 ml-3">
+                  {timeline.map((item, i) => {
+                    const past = isPast(item.date);
+                    return (
+                      <li key={i} className="ml-6">
+                        <span className={`absolute -left-[11px] flex items-center justify-center w-5 h-5 rounded-full ring-4 ring-white ${past ? 'bg-emerald-500' : 'bg-primary'}`}>
+                          <span className="w-2 h-2 rounded-full bg-white" />
+                        </span>
+                        <p className={`text-xs font-semibold uppercase tracking-wide mb-0.5 ${past ? 'text-emerald-600' : 'text-primary'}`}>{fmtDate(item.date)}</p>
+                        <p className="text-sm font-medium text-slate-800">{item.event}</p>
+                        {past && <span className="text-xs text-emerald-600 font-medium">✓ Completed</span>}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            )}
+          </div>
+
+          {/* Google Maps Placeholder */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+            <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-slate-600" />
+              <h3 className="font-semibold text-slate-800">Polling Area Map</h3>
+            </div>
+            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && stateName ? (
+              <iframe title="Polling Area Map" width="100%" height="280" className="border-0" referrerPolicy="no-referrer-when-downgrade"
+                src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(stateName + ' polling booth India')}`} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-14 px-6 text-center gap-3">
+                <div className="bg-slate-100 rounded-full p-4"><MapPin className="w-8 h-8 text-slate-400" /></div>
+                {stateName ? (
+                  <>
+                    <p className="text-sm font-medium text-slate-700">Map ready for <span className="text-primary font-semibold">{stateName}</span></p>
+                    <p className="text-xs text-slate-400">Add <code className="bg-slate-100 px-1 py-0.5 rounded">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to <code className="bg-slate-100 px-1 py-0.5 rounded">.env.local</code> to activate</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">Enter your location in the chat to activate the map</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Voter Readiness Checklist */}
+          <div id="checklist-section" className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+            <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2"><Info className="w-5 h-5 text-slate-600" /><h3 className="font-semibold text-slate-800">Am I Ready to Vote?</h3></div>
+              <span className="text-xs font-semibold text-slate-500">{checkedCount} / 5 completed</span>
+            </div>
+            <div className="h-1.5 bg-slate-100"><div className="h-full bg-primary transition-all duration-500 rounded-r-full" style={{ width: `${(checkedCount / 5) * 100}%` }} /></div>
+            <div className="p-6 space-y-2">
+              {checkedCount === 5 && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-4 py-3 text-sm font-medium text-center mb-3">
+                  🎉 You&apos;re ready to vote!
+                </div>
+              )}
+              {CHECKLIST[lang].map((item, i) => (
+                <button key={i} onClick={() => setChecklist(prev => { const n = [...prev]; n[i] = !n[i]; return n; })}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors text-left group">
+                  {checklist[i]
+                    ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                    : <Circle className="w-5 h-5 text-slate-300 flex-shrink-0 group-hover:text-slate-400" />}
+                  <span className={`text-sm transition-colors ${checklist[i] ? 'line-through text-slate-400' : 'text-slate-700'}`}>{item}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Status Overview */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-md overflow-hidden">
             <div className="bg-slate-100 px-6 py-4 border-b border-slate-200 flex items-center gap-2">
                <Info className="w-5 h-5 text-slate-600" />
                <h3 className="font-semibold text-slate-800">Status Overview</h3>
             </div>
             <div className="p-6 text-sm text-slate-600 flex flex-col items-center justify-center py-12">
-               {dashboardData.pollingLocation === 'Awaiting your state or city.' ? (
+               {!isDataLoaded ? (
                  <p>Tell the assistant your state or city (e.g. &quot;Maharashtra&quot; or &quot;Bengaluru&quot;) to load your voter information.</p>
                ) : (
                  <p className="text-center text-primary font-medium">Your state/city profile has been loaded. Check the cards above for your election details.</p>
@@ -317,7 +463,7 @@ export default function Home() {
         </section>
 
         {/* RIGHT SIDEBAR: Chat Interface (30%) */}
-        <aside className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-full">
+        <aside id="chat-aside" className="flex-[3] w-full min-w-[320px] max-w-[400px] bg-white border border-slate-200 rounded-md shadow-sm flex flex-col overflow-hidden h-full">
           <header className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 flex items-center gap-2">
                <Bot className="w-5 h-5 text-primary" />
