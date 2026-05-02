@@ -28,6 +28,34 @@ const CHECKLIST: Record<Lang, string[]> = {
   Telugu: ['నా దగ్గర EPIC / ఓటరు కార్డు ఉంది', 'పోలింగ్ బూత్ స్థానం తెలుసు', 'ఓటరు జాబితాలో పేరు ధృవీకరించాను', 'ఎన్నికల తేదీ తెలుసు', 'రవాణా ఏర్పాటు చేసాను'],
 };
 
+const LOADING_MESSAGES = [
+  "Analyzing your location...",
+  "Fetching local election details...",
+  "Finding your polling booth...",
+  "Checking voter ID requirements...",
+  "Loading timeline events...",
+  "Almost ready..."
+];
+
+const LoadingIndicator = () => {
+  const [msgIdx, setMsgIdx] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMsgIdx((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex justify-start">
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[90%] text-sm flex items-center gap-3">
+        <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+        <span className="text-slate-600 animate-pulse">{LOADING_MESSAGES[msgIdx]}</span>
+      </div>
+    </div>
+  );
+};
 export default function Home() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -267,8 +295,18 @@ export default function Home() {
 
   const isDataLoaded = dashboardData.pollingLocation !== AWAITING;
   const checkedCount = checklist.filter(Boolean).length;
-  const fmtDate = (d: string) => { try { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return d; } };
-  const isPast = (d: string) => { try { return new Date(d) < new Date(); } catch { return false; } };
+  const fmtDate = (d: string) => {
+    if (!d) return "To be announced";
+    const parsed = new Date(d);
+    if (isNaN(parsed.getTime())) return d;
+    return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const isPast = (d: string) => {
+    if (!d) return false;
+    const parsed = new Date(d);
+    if (isNaN(parsed.getTime())) return false;
+    return parsed < new Date();
+  };
 
   return (
     <main id="app-root" className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
@@ -511,12 +549,7 @@ export default function Home() {
                 </div>
               </div>
             ))}
-            {isLoading && (
-              <div className="bg-slate-50 p-4 rounded-md border border-slate-200 text-sm flex items-center gap-2 text-slate-600">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                Thinking...
-              </div>
-            )}
+            {isLoading && <LoadingIndicator />}
             <div ref={messagesEndRef} />
           </div>
 
