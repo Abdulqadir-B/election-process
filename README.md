@@ -1,8 +1,11 @@
 # Election Assistant
 
 **Author:** Abdul Qadir Bearingwala
+
 **Competition:** PromptWars
-**Live Demo:** https://election-assistant-770475137467.asia-south1.run.app/
+
+**Live Demo:** [View Live App](https://election-assistant-770475137467.asia-south1.run.app/)
+
 **Vertical:** Civic Tech / Voter Education
 
 ---
