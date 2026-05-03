@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -9,6 +10,7 @@ export async function GET(req: Request) {
 
   // Basic input guard: reject empty or suspiciously long location strings
   if (!location || location.length > 200) {
+    logger.warn({ message: 'Maps embed: invalid location param', location: location.slice(0, 50), route: '/api/maps-embed' });
     return new NextResponse(
       `<html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100%;font-family:sans-serif;color:#94a3b8;font-size:14px">Invalid location.</body></html>`,
       { headers: { 'Content-Type': 'text/html' } }
@@ -16,11 +18,14 @@ export async function GET(req: Request) {
   }
 
   if (!apiKey) {
+    logger.error({ message: 'Maps embed: GOOGLE_MAPS_API_KEY is not configured', route: '/api/maps-embed' });
     return new NextResponse(
       `<html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100%;font-family:sans-serif;color:#94a3b8;font-size:14px">Map not configured.</body></html>`,
       { headers: { 'Content-Type': 'text/html' } }
     );
   }
+
+  logger.info({ message: 'Maps embed rendered', location, route: '/api/maps-embed' });
 
   const mapsUrl = `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${encodeURIComponent(location + ', India')}`;
 

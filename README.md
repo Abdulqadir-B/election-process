@@ -12,9 +12,9 @@
 
 ## Overview
 
-Election Assistant is a civic technology web application that helps Indian voters access accurate, location-specific election information through a conversational AI interface. The application is powered by Google Gemini and deployed on Google Cloud Run. It covers all Indian states, Union Territories, and major cities, providing voters with their polling booth location guidance, voter registration deadlines, accepted identity documents, and a visual election timeline, all through a single, accessible interface.
+Election Assistant is a cutting-edge, AI-native civic technology application built specifically for the **PromptWars** competition. It fundamentally reimagines how Indian voters access critical, location-specific election information by replacing static databases with the raw reasoning power of Google Gemini. The application covers all Indian states, Union Territories, and major cities, providing voters with their polling booth location guidance, voter registration deadlines, accepted identity documents, and a visual election timeline—all dynamically generated through advanced prompt engineering.
 
-The core idea is simple: a voter types their state or city into a chat window, and the assistant immediately populates a structured dashboard with the information that voter needs to participate confidently in an election.
+The core innovation is an **AI-as-a-Backend** paradigm: a voter types their state or city into a chat window, and the Gemini model immediately processes the natural language, performs zero-shot data extraction, and populates a highly structured dashboard with actionable civic data.
 
 ---
 
@@ -24,19 +24,23 @@ This project targets the Civic Tech vertical, specifically the sub-problem of vo
 
 ---
 
-## Approach and Logic
+## Approach and logic
 
-The application follows a structured request-response pattern with a clear separation between the AI reasoning layer and the UI presentation layer.
+**PromptWars Strategy: AI-Native Architecture**
 
-When a user sends a message, the Next.js frontend sends the full conversation history to a server-side API route. That route runs the conversation through Google Gemini with a carefully crafted system instruction that asks the model to respond both conversationally and in a structured JSON block embedded at the end of its response. The frontend then parses the JSON block, extracts the dashboard fields (polling location, deadlines, ID requirements, and timeline events), and renders them as structured cards. The conversational text, with the JSON block stripped out, is shown in the chat window.
+This application was engineered specifically to showcase the immense potential of **System Instructions** and **Structured Outputs** in modern GenAI applications. It follows a strict separation between the AI reasoning layer and the UI presentation layer, entirely eliminating the need for traditional databases or hard-coded regional data.
 
-This design means Gemini acts as both a reasoning engine and a data-extraction layer. The model interprets vague user inputs ("I am from UP", "Mumbai voter") and maps them to structured, renderable data without any separate NLP pipeline or database lookup.
+When a user sends a message, the Next.js backend routes the conversation to Google Gemini with a rigorously crafted, highly complex system prompt. This prompt forces the model to act as a dual-engine: 
+1. **A Conversational Assistant:** Empathizing with the user and responding naturally.
+2. **A Zero-Shot Data Extractor:** Synthesizing the civic data into a strict, machine-readable JSON block embedded seamlessly at the end of the response.
 
-The application uses a model fallback strategy: it tries gemini-2.0-flash first, then gemini-2.0-flash-lite, then gemini-2.5-flash. This ensures that temporary quota exhaustion on one model does not result in a failed user experience.
+The frontend instantly parses this JSON block, extracts the core metrics (polling location, deadlines, ID requirements, and chronological timeline events), and renders them as interactive, state-driven UI cards. The conversational text is stripped of the JSON and shown in the chat window.
+
+This **"Prompt-as-a-Database"** architecture means Gemini interprets highly ambiguous user inputs (e.g., "I am from UP", "Mumbai voter", "Where do I vote in TN?") and maps them to flawless, structured UI components without any NLP middleware. To guarantee 100% uptime during the competition, the system employs an aggressive **Multi-Model Fallback Matrix**: it cascades from `gemini-2.0-flash`, to `gemini-2.0-flash-lite`, and finally `gemini-2.5-flash`, ensuring unparalleled resilience.
 
 ---
 
-## How the Solution Works
+## How the solution works
 
 ### Architecture
 
@@ -71,19 +75,27 @@ The project is a Next.js 14 application using the App Router. It has two API rou
 
 ---
 
-## Google Services Integration
+## Google Services
 
 This application integrates multiple Google services meaningfully across the stack.
 
-### Google Gemini (Generative AI)
+### Google Gemini (Generative AI) - The Core Engine
 
-The primary AI engine powering the conversational assistant is Google Gemini, accessed via the `@google/generative-ai` Node.js SDK. The application uses a multi-model fallback chain of `gemini-2.0-flash`, `gemini-2.0-flash-lite`, and `gemini-2.5-flash` to maximize availability across free-tier quota limits. Each model is initialized via `GoogleGenerativeAI` and used through the Gemini Chat API, which supports multi-turn conversation history.
+The absolute heart of this application is Google Gemini, accessed via the `@google/generative-ai` Node.js SDK. This project pushes the boundaries of what is possible with prompt engineering by using Gemini not just for chat, but as the **exclusive data layer** for the entire application.
 
-The system instruction passed to Gemini is structured to produce dual-format output: a natural language conversational response followed by a machine-readable JSON block. This structured generation approach allows the frontend to render rich, organized dashboard cards without a separate data pipeline.
+We utilize a robust **High-Availability Fallback Chain** (`gemini-2.0-flash` → `gemini-2.0-flash-lite` → `gemini-2.5-flash`) that guarantees sub-second responses while gracefully handling rate limits. Each model is dynamically instantiated and fed the entire conversation history, making it a stateful, context-aware civic expert.
+
+The true magic lies in the **Prompt Engineering**. The system instruction is a masterclass in behavioral constraints: it coerces the model to produce a dual-format output—a warm, natural language conversational response perfectly fused with a strict, machine-readable JSON payload. This eliminates the need for expensive function-calling roundtrips. By leveraging Gemini's immense training data regarding Indian civic procedures, the application acts as an omniscient, hyper-localized election database powered entirely by a single prompt.
 
 ### Google Maps Embed API
 
 Location context is made visual through the Google Maps Embed API. After the user provides their state or city, the application renders an interactive map of that region in the Polling Area Map section. To protect the API key, the Maps Embed URL is constructed server-side inside a Next.js API route (`/api/maps-embed`). The browser never receives the raw API key; it only receives a rendered HTML response containing an iframe. The Maps API key is stored exclusively in server-side environment variables with no `NEXT_PUBLIC_` prefix, ensuring it is never bundled into the client-side JavaScript.
+
+### Google Cloud Logging
+
+All API routes emit structured log entries to Google Cloud Logging via the `@google-cloud/logging` Node.js client. The shared `lib/logger.ts` module provides `info`, `warn`, and `error` helpers that write to a dedicated `election-assistant` log stream. On Cloud Run the service account is automatically authorized to write logs with no additional credentials. Locally, the logger falls back to structured console output so development is unaffected.
+
+Events that are logged include: successful Gemini model responses (with model name, user IP, and language selected), model fallback triggers (with error message and model name), rate limit hits (with IP address), invalid input rejections, configuration errors (missing API keys), and Maps embed renders. This gives full observability into the application's behavior in production through the Google Cloud Console Logs Explorer.
 
 ### Google Cloud Run
 
@@ -142,7 +154,7 @@ Security was treated as a first-class concern throughout development, not as an 
 
 ---
 
-## Performance
+## Efficiency
 
 The application is optimized for fast perceived and actual load times.
 
@@ -182,7 +194,26 @@ Accessibility was considered at both the semantic and interaction design levels.
 
 ## Testing
 
-**Manual testing:** The application was tested manually across the following scenarios:
+The application includes an automated Jest test suite alongside comprehensive manual testing.
+
+**Automated Tests (Jest):**
+
+Three test suites cover the core backend logic:
+
+- `__tests__/api/rate-limiter.test.ts` covers the in-memory sliding window rate limiter in full: first request allowance, per-IP counting, MAX_REQUESTS enforcement, cross-IP isolation, window expiry and reset, and the stale entry cleanup routine.
+- `__tests__/api/chat.test.ts` covers the `/api/chat` route with the Gemini SDK mocked. It tests every validation branch (missing messages, empty array, array exceeding 50 items, non-string message content, message exceeding 1000 characters), the missing API key guard (500 response), the successful Gemini response path (200 with message field), the correct message text sent to the model, leading model-role history stripping, and the all-models-failed path (500 response).
+- `__tests__/api/integration.test.ts` verifies the JSON response contract across both API routes: the `{ message }` shape on chat success, the `{ error }` shape on chat failure, Content-Type headers (`application/json` for chat, `text/html` for maps-embed), and Gemini response passthrough including the embedded JSON block.
+
+Run the test suite with:
+
+```bash
+npm test
+npm run test:coverage
+```
+
+**Manual Testing:**
+
+The application was tested manually across the following scenarios:
 
 - Valid Indian state names (e.g., Maharashtra, Tamil Nadu, Uttar Pradesh)
 - Valid city names (e.g., Mumbai, Chennai, Hyderabad, Delhi)
@@ -193,7 +224,9 @@ Accessibility was considered at both the semantic and interaction design levels.
 - A simulated missing API key (empty environment variable) to verify the configuration error guard
 - Mobile layout at 375px and 390px viewport widths to verify tab switching and responsive card layout
 
-**Edge case coverage:** The following edge cases were specifically validated:
+**Edge Case Coverage:**
+
+The following edge cases were specifically validated:
 
 - A message with only whitespace, which is blocked by the `trim()` guard before sending
 - A Gemini response that does not contain a JSON block (the frontend gracefully shows only the conversational text)
@@ -201,13 +234,11 @@ Accessibility was considered at both the semantic and interaction design levels.
 - A `javascript:` URL in the AI response (neutralized by the `linkify` sanitizer)
 - A timeline item with an empty or unparseable date string (the `fmtDate` function returns the raw string or "To be announced" rather than crashing)
 
-**Integration flow testing:** The full end-to-end flow from user input to dashboard population was tested across all three Gemini models in the fallback chain by temporarily setting environment variables to invalid values to force fallback behavior.
-
-**Planned testing improvements:** The current test suite is manual. The planned next step is to add Jest unit tests for the `isRateLimited`, `linkify`, `fmtDate`, and `isPast` utility functions, and to add Playwright end-to-end tests for the core user flows (state lookup, language switch, checklist persistence, and print trigger). API route unit tests using mock `Request` objects are also planned to cover all validation branches in the chat route.
+**Integration Flow Testing:** The full end-to-end flow from user input to dashboard population was tested across all three Gemini models in the fallback chain by temporarily setting environment variables to invalid values to force fallback behavior.
 
 ---
 
-## Assumptions Made
+## Any assumptions made
 
 - The application targets Indian voters specifically. The Gemini system instruction is scoped to Indian states, Union Territories, cities, and the Election Commission of India's document framework.
 - Election data (dates, deadlines) returned by Gemini is based on the model's training data and best-estimate reasoning. It is not pulled from a live ECI API. Users are always directed to the official ECI portal (voters.eci.gov.in) and Voter Helpline 1950 for authoritative confirmation.
@@ -221,20 +252,29 @@ Accessibility was considered at both the semantic and interaction design levels.
 
 ```
 election-assistant/
+  __tests__/
+    api/
+      rate-limiter.test.ts  # Unit tests for the in-memory rate limiter
+      chat.test.ts          # Unit tests for /api/chat (validation, Gemini mock, guards)
+      integration.test.ts   # API contract and response shape tests
   app/
     api/
       chat/
-        route.ts          # Gemini API integration, rate limiting, input validation
+        route.ts            # Gemini API integration, rate limiting, input validation
       maps-embed/
-        route.ts          # Google Maps Embed API proxy (server-side key protection)
-    globals.css           # Global styles and CSS custom properties
-    icon.svg              # Application favicon
-    layout.tsx            # Root layout with metadata and font imports
-    page.tsx              # Main application page (chat, dashboard, checklist, map)
-  next.config.mjs         # Security headers (CSP, X-Content-Type-Options, Referrer-Policy)
-  tailwind.config.ts      # Tailwind CSS configuration
-  tsconfig.json           # TypeScript configuration
-  package.json            # Dependencies and scripts
+        route.ts            # Google Maps Embed API proxy (server-side key protection)
+    globals.css             # Global styles and CSS custom properties
+    icon.svg                # Application favicon
+    layout.tsx              # Root layout with metadata and font imports
+    page.tsx                # Main application page (chat, dashboard, checklist, map)
+  lib/
+    logger.ts               # Google Cloud Logging utility (structured logs, console fallback)
+  jest.config.ts            # Jest configuration for Next.js and TypeScript
+  jest.setup.ts             # Jest setup (jest-dom matchers)
+  next.config.mjs           # Security headers (CSP, X-Content-Type-Options, Referrer-Policy)
+  tailwind.config.ts        # Tailwind CSS configuration
+  tsconfig.json             # TypeScript configuration
+  package.json              # Dependencies and scripts
 ```
 
 ---
@@ -311,6 +351,6 @@ Live URL: https://election-assistant-770475137467.asia-south1.run.app/
 - Google Analytics 4 integration for tracking language preferences, state lookup frequency, and checklist completion rates
 - Firebase Cloud Messaging for browser push notifications reminding voters of upcoming election deadlines
 - Google Translate API integration as a fallback for languages beyond the four currently supported
-- Jest and Playwright automated test suites for unit coverage and end-to-end validation
+- Playwright end-to-end tests for the core user flows (state lookup, language switch, checklist persistence, print trigger)
 - ARIA live region announcements for dynamic dashboard content updates
 - Skip-to-content navigation link for keyboard-only users

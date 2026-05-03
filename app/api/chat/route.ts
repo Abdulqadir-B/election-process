@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 // Initialized once at module level — efficient, avoids re-creating on every request
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -39,13 +40,13 @@ setInterval(() => {
       rateLimitMap.delete(ip);
     }
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   // 1. Guard: API key must be present
   if (!process.env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY is missing from environment variables.");
+    logger.error({ message: "GEMINI_API_KEY is missing from environment variables.", route: "/api/chat" });
     return NextResponse.json({ error: "The assistant is currently unavailable due to a configuration issue. Please try again later." }, { status: 500 });
   }
 
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     'unknown';
 
   if (isRateLimited(ip)) {
-    console.warn(`Rate limit exceeded for IP: ${ip}`);
+    logger.warn({ message: "Rate limit exceeded", ip, route: "/api/chat" });
     return NextResponse.json(
       { error: "You're sending messages too quickly. Please wait a moment and try again." },
       { status: 429 }
@@ -166,11 +167,13 @@ Keep your conversational response brief, professional, and clear. Rely on the JS
         const result = await Promise.race([chat.sendMessage(latestMessage), timeoutPromise]);
         responseText = result.response.text();
 
+        logger.info({ message: "Gemini model responded successfully", model: modelName, ip, language: langName });
+
         // Success! Clear error and break out of the fallback loop
         lastError = null;
         break;
       } catch (err: any) {
-        console.warn(`Model ${modelName} failed:`, err?.message || err);
+        logger.warn({ message: `Model ${modelName} failed, trying next fallback`, errorMessage: err?.message || String(err), model: modelName });
         lastError = err;
         // Continue to the next model in the array
       }
@@ -184,9 +187,9 @@ Keep your conversational response brief, professional, and clear. Rely on the JS
     return NextResponse.json({ message: responseText });
 
   } catch (error: any) {
-    // 5. Log the real error to console for debugging, but return a friendly message to UI
+    // 5. Log the real error with Cloud Logging, return a friendly message to UI
     const errorMessage = error?.message || "Unknown error occurred.";
-    console.error("Gemini Chat API Error:", errorMessage, error);
+    logger.error({ message: "Gemini Chat API unhandled error", errorMessage, route: "/api/chat", ip });
     return NextResponse.json(
       { error: "I am currently experiencing high traffic and cannot fetch the details right now. Please try again in a few moments." },
       { status: 500 }
